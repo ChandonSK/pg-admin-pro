@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import {
   Bookmark,
   BookOpen,
@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { api } from '../api/client';
+import { useDismissible } from '../hooks/useDismissible';
 import type {
   AutocompleteTable,
   ExplainResult,
@@ -234,6 +235,9 @@ export function SqlEditorTab({
   const [acPrefix, setAcPrefix] = useState('');
   const [acTableScope, setAcTableScope] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorBoxRef = useRef<HTMLDivElement>(null);
+  const closeAc = useCallback(() => setAcOpen(false), []);
+  useDismissible(editorBoxRef, acOpen, closeAc);
 
   const [snippetsOpen, setSnippetsOpen] = useState(false);
   const [snippets, setSnippets] = useState<SQLSnippet[]>([]);
@@ -741,7 +745,7 @@ export function SqlEditorTab({
         )}
 
         {/* SQL Editor + Schema Autocomplete Popup */}
-        <div className="relative">
+        <div ref={editorBoxRef} className="relative">
           <textarea
             ref={textareaRef}
             rows={8}

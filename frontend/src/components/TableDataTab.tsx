@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { api } from '../api/client';
+import { useDismissible } from '../hooks/useDismissible';
 import type { ColumnInfo, FilterCond, QueryRowsResp } from '../types';
 import { ImportRowsModal } from './ImportRowsModal';
 import { Modal } from './Modal';
@@ -90,6 +91,7 @@ export function TableDataTab({
   const [filterCol, setFilterCol] = useState('');
   const [filterOp, setFilterOp] = useState('=');
   const [filterVal, setFilterVal] = useState('');
+  const [filterError, setFilterError] = useState('');
   const [activeFilters, setActiveFilters] = useState<FilterCond[]>([]);
 
   // Row selection & modals
@@ -99,6 +101,9 @@ export function TableDataTab({
   const [importOpen, setImportOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const closeExportMenu = useCallback(() => setExportOpen(false), []);
+  useDismissible(exportMenuRef, exportOpen, closeExportMenu);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [pendingDeleteIndices, setPendingDeleteIndices] = useState<number[]>([]);
   const [deleting, setDeleting] = useState(false);
@@ -170,10 +175,48 @@ export function TableDataTab({
 
   const handleAddFilter = (e: FormEvent) => {
     e.preventDefault();
-    if (!filterCol) return;
+    if (!filterCol) {
+      setFilterError('Please select a column.');
+      return;
+    }
+
+    const isNullOp = filterOp === 'is_null' || filterOp === 'is_not_null';
+    const trimmed = filterVal.trim();
+
+    if (!isNullOp && trimmed === '') {
+      setFilterError('Please enter a filter value before applying.');
+      return;
+    }
+
+    if (!isNullOp && filterOp !== 'ilike' && selectedFilterColumnMeta) {
+      const ft = selectedFilterColumnMeta.formatType.toLowerCase();
+      const isNumericType =
+        /^(smallint|integer|int|int2|int4|int8|bigint|numeric|decimal|real|double precision|float)/.test(
+          ft
+        );
+      if (isNumericType && !/^-?\d+(\.\d+)?$/.test(trimmed)) {
+        setFilterError(`Column "${filterCol}" expects a valid number (${selectedFilterColumnMeta.formatType}).`);
+        return;
+      }
+      if ((ft === 'boolean' || ft === 'bool') && !/^(true|false|t|f|1|0)$/i.test(trimmed)) {
+        setFilterError(`Column "${filterCol}" expects true or false.`);
+        return;
+      }
+    }
+
+    const finalValue = isNullOp ? '' : trimmed;
+    const duplicate = activeFilters.some(
+      (f) => f.column === filterCol && f.operator === filterOp && f.value === finalValue
+    );
+    if (duplicate) {
+      setFilterError('This exact filter is already applied.');
+      return;
+    }
+
+    setFilterError('');
     setActiveFilters((prev) => [
       ...prev,
-      { column: filterCol, operator: filterOp, value: filterVal },
+      { column: filterCol, operator: filterOp, value: finalValue },
     ]);
     setFilterVal('');
     setPage(1);
@@ -338,7 +381,7 @@ export function TableDataTab({
           </button>
 
           {/* Export Dropdown */}
-          <div className="relative">
+          <div ref={exportMenuRef} className="relative">
             <button
               type="button"
               disabled={exporting}
@@ -427,67 +470,92 @@ export function TableDataTab({
       {(filterOpen || activeFilters.length > 0) && data && (
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/70 p-3 space-y-2.5">
           {filterOpen && (
-            <form onSubmit={handleAddFilter} className="flex flex-wrap items-center gap-2">
-              <select
-                value={filterCol}
-                onChange={(e) => {
-                  setFilterCol(e.target.value);
-                  setFilterVal('');
-                }}
-                className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-xs font-mono"
-              >
-                {data.columns.map((c) => (
-                  <option key={c.name} value={c.name}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={filterOp}
-                onChange={(e) => setFilterOp(e.target.value)}
-                className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-xs font-mono"
-              >
-                <option value="=">=</option>
-                <option value="!=">!=</option>
-                <option value="ilike">ILIKE (contains)</option>
-                <option value=">">&gt;</option>
-                <option value=">=">&gt;=</option>
-                <option value="<">&lt;</option>
-                <option value="<=">&lt;=</option>
-                <option value="is_null">IS NULL</option>
-                <option value="is_not_null">IS NOT NULL</option>
-              </select>
-              {filterOp !== 'is_null' && filterOp !== 'is_not_null' && (
-                selectedFilterColumnMeta?.enumValues && selectedFilterColumnMeta.enumValues.length > 0 && (filterOp === '=' || filterOp === '!=') ? (
-                  <select
-                    value={filterVal}
-                    onChange={(e) => setFilterVal(e.target.value)}
-                    className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-xs font-mono w-48"
-                  >
-                    <option value="">-- pick enum value --</option>
-                    {selectedFilterColumnMeta.enumValues.map((ev) => (
-                      <option key={ev} value={ev}>
-                        {ev}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    value={filterVal}
-                    onChange={(e) => setFilterVal(e.target.value)}
-                    placeholder="Value..."
-                    className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-xs font-mono w-48"
-                  />
-                )
+            <div className="space-y-1.5">
+              <form onSubmit={handleAddFilter} className="flex flex-wrap items-center gap-2">
+                <select
+                  value={filterCol}
+                  onChange={(e) => {
+                    setFilterCol(e.target.value);
+                    setFilterVal('');
+                    setFilterError('');
+                  }}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-xs font-mono"
+                >
+                  {data.columns.map((c) => (
+                    <option key={c.name} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={filterOp}
+                  onChange={(e) => {
+                    setFilterOp(e.target.value);
+                    setFilterError('');
+                  }}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-xs font-mono"
+                >
+                  <option value="=">=</option>
+                  <option value="!=">!=</option>
+                  <option value="ilike">ILIKE (contains)</option>
+                  <option value=">">&gt;</option>
+                  <option value=">=">&gt;=</option>
+                  <option value="<">&lt;</option>
+                  <option value="<=">&lt;=</option>
+                  <option value="is_null">IS NULL</option>
+                  <option value="is_not_null">IS NOT NULL</option>
+                </select>
+                {filterOp !== 'is_null' && filterOp !== 'is_not_null' && (
+                  selectedFilterColumnMeta?.enumValues && selectedFilterColumnMeta.enumValues.length > 0 && (filterOp === '=' || filterOp === '!=') ? (
+                    <select
+                      value={filterVal}
+                      aria-invalid={Boolean(filterError)}
+                      onChange={(e) => {
+                        setFilterVal(e.target.value);
+                        setFilterError('');
+                      }}
+                      className={`rounded-lg border bg-white dark:bg-slate-950 px-2.5 py-1.5 text-xs font-mono w-48 ${
+                        filterError
+                          ? 'border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/40'
+                          : 'border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      <option value="">-- pick enum value --</option>
+                      {selectedFilterColumnMeta.enumValues.map((ev) => (
+                        <option key={ev} value={ev}>
+                          {ev}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={filterVal}
+                      aria-invalid={Boolean(filterError)}
+                      onChange={(e) => {
+                        setFilterVal(e.target.value);
+                        setFilterError('');
+                      }}
+                      placeholder="Value..."
+                      className={`rounded-lg border bg-white dark:bg-slate-950 px-2.5 py-1.5 text-xs font-mono w-48 ${
+                        filterError
+                          ? 'border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/40'
+                          : 'border-slate-200 dark:border-slate-700'
+                      }`}
+                    />
+                  )
+                )}
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
+                >
+                  Apply Filter
+                </button>
+              </form>
+              {filterError && (
+                <p className="text-[11px] font-medium text-red-500">{filterError}</p>
               )}
-              <button
-                type="submit"
-                className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
-              >
-                Apply Filter
-              </button>
-            </form>
+            </div>
           )}
 
           {activeFilters.length > 0 && (

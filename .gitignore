@@ -1,7 +1,6 @@
 # Binaries & build artifacts
 /pg-admin-pro
 /pg-admin-pro.exe
-/web/
 /backups/*
 !/backups/.gitkeep
 /data/
