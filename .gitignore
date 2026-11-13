@@ -1,0 +1,18 @@
+# Binaries & build artifacts
+/pg-admin-pro
+/pg-admin-pro.exe
+/web/
+/backups/*
+!/backups/.gitkeep
+/data/
+
+# Environment secrets
+.env
+
+# Frontend dependencies
+frontend/node_modules/
+frontend/dist/
+
+# OS / Editor
+.DS_Store
+*.log

@@ -1,0 +1,21 @@
+[Unit]
+Description=pg-admin-pro Database & Zero-Conflict Backup Studio
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/pg-admin-pro
+ExecStart=/opt/pg-admin-pro/pg-admin-pro
+Restart=always
+RestartSec=3
+EnvironmentFile=/opt/pg-admin-pro/.env
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
