@@ -41,6 +41,7 @@ pg-admin-pro/
 ├── data/                        # Encrypted profiles, snippets & backup settings (ignored by git)
 ├── .env.example                 # Example runtime configuration
 ├── pg-admin-pro.service.example # Example systemd unit file for Linux servers
+├── start.sh                     # Starts Go server and opens browser automatically
 └── build.sh                     # Builds frontend -> web/ and compiles static Go binary
 ```
 
@@ -49,7 +50,8 @@ pg-admin-pro/
 ## Quick Start (Local Usage)
 
 ### Prerequisites
-- **Go 1.22+** and **Node.js 18+** (for building from source)
+- **Go 1.22+**
+- **Node.js 18+** *(optional — only required if you modify `frontend/`; pre-built `web/` assets are already included in the repository)*
 - Optional CLI tools on the host machine for backup/restore operations:
   - PostgreSQL: `pg_dump`, `pg_restore`, `psql` (`postgresql-client`)
   - MySQL / MariaDB: `mysqldump`, `mysql`
@@ -64,15 +66,24 @@ cp .env.example .env
 
 Edit `.env` if you want to customize `APP_ADDR`, `DATA_DIR`, `BACKUP_DIR`, or login form defaults.
 
-### 2. Build & Run
+### 2. Run Instantly (Auto-Opens Browser)
+
+```bash
+chmod +x start.sh
+./start.sh
+```
+
+`start.sh` reads `APP_ADDR` from `.env` (defaults to `:8080`), runs `go run .`, and automatically opens **`http://localhost:8080`** in your default browser once the server is ready.
+
+### 3. Build Single Static Binary (Optional)
+
+If you modify `frontend/` or want a standalone executable (`./pg-admin-pro`):
 
 ```bash
 chmod +x build.sh
 ./build.sh
 ./pg-admin-pro
 ```
-
-Open **`http://localhost:8080`** in your browser and sign in with your database credentials (PostgreSQL, MySQL, or SQLite file path).
 
 ### Development Mode (Hot Reload)
 
